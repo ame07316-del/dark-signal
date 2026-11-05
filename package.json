@@ -1,0 +1,50 @@
+{
+  "name": "dark-signal",
+  "version": "1.0.0",
+  "description": "",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "dev": "npm run build:client && tsx watch src/index.ts",
+    "build": "tsc && npm run build:client",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.client.json",
+    "test": "npm run build:client && tsx --test tests/*.test.ts",
+    "build:client": "esbuild client/app.ts --bundle --format=esm --target=es2022 --outfile=dist/public/app.js --minify",
+    "test:e2e": "playwright test",
+    "test:load": "tsx tools/load-smoke.ts",
+    "hash:owner": "node tools/hash-owner.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ame07316-del/dark-signal.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ame07316-del/dark-signal/issues"
+  },
+  "homepage": "https://github.com/ame07316-del/dark-signal#readme",
+  "dependencies": {
+    "three": "^0.187.0",
+    "ws": "^8.22.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@sparticuz/chromium": "^153.0.0",
+    "@types/node": "^26.6.6",
+    "@types/three": "^0.187.0",
+    "@types/ws": "^8.18.2",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  },
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22 <23"
+  }
+}
