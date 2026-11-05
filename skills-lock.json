@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "skills": {
+    "design-taste-frontend": {
+      "source": "Leonxlnx/taste-skill",
+      "sourceType": "github",
+      "skillPath": "skills/taste-skill/SKILL.md",
+      "computedHash": "23b3930015c478034b222e1a015da03a962c8ab48aee9fb4f3f69d977034feaa",
+      "installMode": "copy"
+    },
+    "img2threejs": {
+      "source": "img2threejs/img2threejs",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "7dad759c5eef5d887930beced08ad5779ea2e7980132ba673361d5b6569ef699",
+      "installMode": "copy"
+    },
+    "scanpy": {
+      "source": "K-Dense-AI/scientific-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/scanpy/SKILL.md",
+      "computedHash": "d6d2bbe3c33241ee47ddfbcb24d7b9d87b101380ef05872e5aee3dca9a741986",
+      "installMode": "copy"
+    },
+    "testing-for-xss-vulnerabilities": {
+      "source": "mukul975/Anthropic-Cybersecurity-Skills",
+      "sourceType": "github",
+      "skillPath": "skills/testing-for-xss-vulnerabilities/SKILL.md",
+      "computedHash": "377737fc63286807b0df26bbeb7b78cd516b32c90c15583a6c23e07d202f1b52",
+      "installMode": "copy"
+    },
+    "testing-websocket-api-security": {
+      "source": "mukul975/Anthropic-Cybersecurity-Skills",
+      "sourceType": "github",
+      "skillPath": "skills/testing-websocket-api-security/SKILL.md",
+      "computedHash": "f934eee88ef17957455a2e0c545a115577b6d1470bb4f4806c6246e59e1760d2",
+      "installMode": "copy"
+    }
+  }
+}
