@@ -29,6 +29,9 @@ test('HTTP health and websocket lobby lifecycle, reconnect, validation and host 
     assert.match(await (await fetch(base + '/')).text(), /DARK SIGNAL/);
     assert.match((await fetch(base + '/app.js')).headers.get('content-type')!, /javascript/);
     assert.equal((await fetch(base + '/missing')).status, 404);
+    assert.equal((await fetch(base + '/app.js?v=1')).status, 200);
+    assert.equal((await fetch(base + '/', {method:'HEAD'})).status, 200);
+    assert.equal((await fetch(base + '/ready')).status, 200);
     const a = await connect(base.replace('http', 'ws') + '/ws'); const b = await connect(base.replace('http', 'ws') + '/ws');
     a.ws.send('null'); assert.equal((await a.next('error')).code, 'INVALID_MESSAGE');
     a.send({ type: 'create', name: 'Host', requestId: '1' }); const session = await a.next('session');

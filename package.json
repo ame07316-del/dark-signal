@@ -8,14 +8,16 @@
   },
   "scripts": {
     "dev": "npm run build:client && tsx watch src/index.ts",
-    "build": "tsc && npm run build:client",
-    "start": "node dist/index.js",
+    "build": "node tools/clean-build.mjs && tsc && npm run build:client && node tools/package-runtime.mjs",
+    "start": "node hosting/server/index.js",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.client.json",
-    "test": "npm run build:client && tsx --test tests/*.test.ts",
+    "test": "npm run build:client && tsx --test tests/*.test.ts && npm run test:runtime",
     "build:client": "esbuild client/app.ts --bundle --format=esm --target=es2022 --outfile=dist/public/app.js --minify",
     "test:e2e": "playwright test",
     "test:load": "tsx tools/load-smoke.ts",
-    "hash:owner": "node tools/hash-owner.mjs"
+    "hash:owner": "node tools/hash-owner.mjs",
+    "verify:runtime": "node tools/check-runtime.mjs",
+    "test:runtime": "node --test tests/runtime.test.mjs"
   },
   "repository": {
     "type": "git",
@@ -29,7 +31,6 @@
   },
   "homepage": "https://github.com/ame07316-del/dark-signal#readme",
   "dependencies": {
-    "three": "^0.187.0",
     "ws": "^8.22.1"
   },
   "devDependencies": {
@@ -40,11 +41,13 @@
     "@types/ws": "^8.18.2",
     "esbuild": "^0.28.2",
     "tsx": "^4.23.15",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "three": "^0.187.0"
   },
   "private": true,
   "type": "module",
   "engines": {
     "node": ">=22 <23"
-  }
+  },
+  "main": "hosting/server/index.js"
 }
