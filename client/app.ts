@@ -5,11 +5,19 @@ import { segmentClear } from '../src/hunters.js';
 import { initialDoors, closedDoors, doorDistance, zoneAt } from '../src/map.js';
 import { createView } from './view3d.js';
 import { worldDirection, wrapYaw } from './controls.js';
-import { reconcile } from './prediction.js';
+import { reconcile, type Sample } from './prediction.js';
+import { MotionPresentation, type MotionIntent } from './presentation.js';
+import { movementStatus } from './movement-status.js';
+import { startFrameLoop } from './frame-loop.js';
 import { ARENA, advance, newMotion, type Motion } from '../src/movement.js';
 const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const button = (id: string) => el<HTMLButtonElement>(id);
 const notice = (s: string) => { el('notice').textContent = s;el('entryError').textContent=s; };
+function showMovementStatus(message: string) {
+  const status = el('movementStatus');
+  if (status.textContent !== message) status.textContent = message;
+  if (status.hidden !== !message) status.hidden = !message;
+}
 let ws: WebSocket, session: { code: string; playerId: string; token: string } | null = null;
 let room: any = null, state: any = null, motion: Motion = newMotion(), seq = 0;
 let stream: MediaStream | null = null, calibrating = false;
@@ -27,14 +35,15 @@ let mapCompatible = true;
 let firstPerson = false, yaw = -Math.PI * .75, pitch = 0, lightOn = true;
 let view: ReturnType<typeof createView> | null = null;
 const keys = new Set<string>(); const remote = new Map<string, { x: number; z: number }>();
+const presentation = new MotionPresentation();
 let reviveHeld:string|null=null;
-let pending: { seq: number; x: number; z: number; yaw: number; mode: 'walk' | 'run' | 'crouch' }[] = [];
+let pending: Sample[] = [];
 function send(m: object) { if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m)); }
 function save() { if (session) sessionStorage.setItem('dark-signal-session', JSON.stringify({ ...session, seq })); else sessionStorage.removeItem('dark-signal-session'); }
 try { const saved = JSON.parse(sessionStorage.getItem('dark-signal-session') || 'null'); if (saved?.token && saved?.code) { session = saved; seq = Number.isSafeInteger(saved.seq) ? saved.seq : 0; } } catch { sessionStorage.removeItem('dark-signal-session'); }
 function resetMotion() { keys.clear();reviveHeld=null; pending = []; motion.input = null; }
 function stopMic() { micGeneration++;calibrationKey='';calibrating=false;voice.clear();stream?.getTracks().forEach(t => {t.onended=null;t.onmute=null;t.stop();});stream=null;micSource?.disconnect();micSource=null;analyser?.disconnect();analyser=null;renderLobby(); }
-function clearSession() { if (document.pointerLockElement) document.exitPointerLock(); session = null; hunters = []; doors = initialDoors(); room = null; state = null; resetMotion();remote.clear();stopMic(); void sound.dispose(); save(); renderLobby(); }
+function clearSession() { if (document.pointerLockElement) document.exitPointerLock(); session = null; hunters = []; doors = initialDoors(); room = null; state = null; resetMotion();presentation.reset();showMovementStatus('');remote.clear();stopMic(); void sound.dispose(); save(); renderLobby(); }
 function renderLobby() {
   const me = room?.players.find((p: any) => p.id === session?.playerId);
   for (const id of ['create', 'join', 'solo']) button(id).disabled = !!session || ws?.readyState !== WebSocket.OPEN;
@@ -44,7 +53,7 @@ function renderLobby() {
   button('leave').disabled = !session || ws?.readyState !== WebSocket.OPEN;
   button('start').disabled = !mapCompatible || !me || room?.hostId !== me.id || room.phase !== 'lobby' || room.players.length < (room.mode === 'solo-test' ? 1 : 2) || room.players.some((p: any) => !p.ready || !p.connected);
   el('roomCode').textContent = room?.code || '—';
-  el('phase').textContent = room?.phase === 'playing' ? 'الاختبار جارٍ — شغّل المايك لاستعادة الحركة بعد الانقطاع.' : room?.mode === 'solo-test' ? 'تجربة فردية · شغّل المايك وأكمل المعايرة، ثم اضغط أنا مستعد وابدأ الاختبار.' : 'يلزم لاعبان على الأقل، ومايك معاير واستعداد الجميع.';
+  el('phase').textContent = room?.phase === 'finished' ? 'انتهت الجولة. المضيف يستطيع إعادة الفريق للردهة.' : room?.phase === 'playing' ? (me?.mic ? 'الجولة جارية.' : 'الحركة متوقفة. شغّل المايك لاستعادتها.') : room?.mode === 'solo-test' ? 'تجربة فردية · شغّل المايك وأكمل المعايرة، ثم اضغط أنا مستعد وابدأ الاختبار.' : 'يلزم لاعبان على الأقل، ومايك معاير واستعداد الجميع.';
   el('players').replaceChildren();
   for (const p of room?.players || []) {
     const li = document.createElement('li');
@@ -56,14 +65,24 @@ function connect() {
   ws = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws`);
   ws.onopen = () => { attempts = 0; el('connection').textContent = '● متصل بالخادم'; if (session) send({ type: 'resume', code: session.code, token: session.token }); renderLobby(); };
   ws.onclose = () => {
-    el('connection').textContent = '○ انقطع الاتصال — إعادة المحاولة'; resetMotion(); stopMic(); room = null; state = null; hunters = []; sound.atmosphere(false); renderLobby();
+    el('connection').textContent = '○ انقطع الاتصال — إعادة المحاولة'; resetMotion(); stopMic(); room = null; state = null; hunters = []; presentation.reset(); if (session) showMovementStatus('انقطع الاتصال بالخادم؛ الحركة متوقفة حتى يعود الاتصال.'); sound.atmosphere(false); renderLobby();
     reconnectTimer = setTimeout(connect, Math.min(5000, 500 * 2 ** attempts++));
   };
   ws.onerror = () => notice('تعذر اتصال الغرف عبر WebSocket. ستتم إعادة المحاولة؛ لو الرابط محميّ افتح المعاينة من داخل Arena بدل رابط E2B الخام.');
   ws.onmessage = event => {
     const m = JSON.parse(event.data);
     if (m.type === 'session') { session = { code: m.code, playerId: m.playerId, token: m.token }; save(); notice('تم الدخول. شغّل المايك، والزم الصمت أثناء المعايرة.'); }
-    if (m.type === 'room') { const started = room?.phase !== 'playing' && m.room.phase === 'playing'; room = m.room; doors = room.doors;if(room.phase==='lobby'){resetMotion();state=null;el('results').textContent='';button('rematch').hidden=true;el('life').textContent='٣ قلوب · طلقة واحدة عند بدء الجولة';el('clues').textContent='اجمع الأدلة وأنقذ سليم ثم اهرب';} if (started) { resetMotion(); motion = newMotion(Math.max(0, room.players.findIndex((p: any) => p.id === session?.playerId))); } voice.sync(room.players); sound.atmosphere(room.phase==='playing');renderLobby(); }
+    if (m.type === 'room') {
+      const started = room?.phase !== 'playing' && m.room.phase === 'playing';
+      room = m.room; doors = room.doors;
+      if (room.phase === 'lobby') {
+        resetMotion(); state = null; presentation.reset(); showMovementStatus('');
+        el('results').textContent = ''; button('rematch').hidden = true;
+        el('life').textContent = '٣ قلوب · طلقة واحدة عند بدء الجولة'; el('clues').textContent = 'اجمع الأدلة وأنقذ سليم ثم اهرب';
+      }
+      if (started) { resetMotion(); motion = newMotion(Math.max(0, room.players.findIndex((p: any) => p.id === session?.playerId))); presentation.reset(); }
+      voice.sync(room.players); sound.atmosphere(room.phase === 'playing'); renderLobby();
+    }
     if (m.type === 'map') {
       mapCompatible = m.map?.id === ARENA.id;
       if (!mapCompatible) { resetMotion(); notice('نسخة الخريطة تغيرت. حدّث الصفحة قبل اللعب لتفادي اختلاف التصادم.'); }
@@ -161,19 +180,41 @@ for (const b of document.querySelectorAll<HTMLButtonElement>('[data-key]')) {
   b.onpointerdown = e => { e.preventDefault(); b.setPointerCapture(e.pointerId); keys.add(b.dataset.key!); };
   for (const name of ['pointerup','pointercancel','lostpointercapture']) b.addEventListener(name, () => keys.delete(b.dataset.key!));
 }
-setInterval(() => {
+function canPredictMovement() {
   const me = room?.players.find((p: any) => p.id === session?.playerId);
-  if (!mapCompatible || state?.round?.self?.life!=='active' || room?.phase !== 'playing' || !me?.mic || ws.readyState !== WebSocket.OPEN || document.hidden) return;
+  const serverMe = state?.players.find((p: any) => p.id === session?.playerId);
+  return !!(mapCompatible && state?.round?.self?.life === 'active' && room?.phase === 'playing' && me?.mic &&
+    serverMe && !serverMe.frozen && ws?.readyState === WebSocket.OPEN && !document.hidden);
+}
+function currentIntent(): MotionIntent {
   const x = Number(keys.has('KeyD') || keys.has('ArrowRight')) - Number(keys.has('KeyA') || keys.has('ArrowLeft'));
   const z = Number(keys.has('KeyS') || keys.has('ArrowDown')) - Number(keys.has('KeyW') || keys.has('ArrowUp'));
-  const mode = (keys.has('ShiftLeft') ? 'run' : keys.has('ControlLeft') ? 'crouch' : el<HTMLSelectElement>('mode').value) as 'walk' | 'run' | 'crouch';
+  const mode = (keys.has('ShiftLeft') ? 'run' : keys.has('ControlLeft') ? 'crouch' : el<HTMLSelectElement>('mode').value) as MotionIntent['mode'];
   const direction = firstPerson ? worldDirection(x,z,yaw) : { x,z };
   const length = Math.max(1,Math.hypot(direction.x,direction.z));
-  const input = { seq: ++seq, x: direction.x/length, z: direction.z/length, yaw, pitch, mode };
+  return { x: direction.x/length, z: direction.z/length, yaw, pitch, mode };
+}
+setInterval(() => {
+  if (!canPredictMovement()) return;
+  const input = { seq: ++seq, ...currentIntent() };
   send({ type: 'move', ...input }); pending.push(input); pending = pending.slice(-5);
-  motion.input = { ...input, at: performance.now() }; advance(motion, true, performance.now(), closedDoors(doors)); save();
+  const now = performance.now();
+  motion.input = { ...input, at: now }; advance(motion, true, now, closedDoors(doors)); save();
 }, 50);
 const canvas = el<HTMLCanvasElement>('arena'), ctx = canvas.getContext('2d')!;
+// The map geometry never changes during a round; render it once, not on every frame.
+const mapLayer = document.createElement('canvas'); mapLayer.width = canvas.width; mapLayer.height = canvas.height;
+const mapCtx = mapLayer.getContext('2d')!, scale = canvas.width / ARENA.maxX;
+for (const zone of ARENA.zones) {
+  mapCtx.fillStyle = zone.kind === 'courtyard' ? '#233c31' : zone.kind === 'room' ? '#1c2729' : '#172326';
+  mapCtx.fillRect(zone.minX*scale,zone.minZ*scale,(zone.maxX-zone.minX)*scale,(zone.maxZ-zone.minZ)*scale);
+}
+mapCtx.strokeStyle = '#1e3032'; mapCtx.lineWidth = 1;
+for (let i = 0; i <= ARENA.maxX; i++) { mapCtx.beginPath(); mapCtx.moveTo(i*scale,0); mapCtx.lineTo(i*scale,800); mapCtx.moveTo(0,i*scale); mapCtx.lineTo(800,i*scale); mapCtx.stroke(); }
+mapCtx.fillStyle = '#4a5856'; for (const w of ARENA.walls) mapCtx.fillRect(w.minX*scale,w.minZ*scale,(w.maxX-w.minX)*scale,(w.maxZ-w.minZ)*scale);
+mapCtx.fillStyle = '#8fa69a'; mapCtx.font = '12px Tahoma'; mapCtx.textAlign = 'center';
+for (const zone of ARENA.zones) mapCtx.fillText(zone.label,zone.x*scale,zone.z*scale);
+let idleMapDrawn = false;
 function nearestDoor() {
   return ARENA.doors.filter(d => doorDistance(motion.x,motion.z,d)<=1.8).sort((a,b)=>doorDistance(motion.x,motion.z,a)-doorDistance(motion.x,motion.z,b))[0];
 }
@@ -197,6 +238,9 @@ button('rematch').onclick=()=>send({type:'rematch'});
 el<HTMLSelectElement>('spectate').onchange=()=>send({type:'spectate',targetId:el<HTMLSelectElement>('spectate').value});
 function renderGame(){
   const r=state?.round,self=r?.self;if(!self)return;
+  if (r.result && room && room.phase !== 'finished') { room.phase = 'finished'; renderLobby(); }
+  const micReady = !!room?.players.find((p:any) => p.id === session?.playerId)?.mic;
+  showMovementStatus(movementStatus(self.life, micReady, !!r.result));
   if(reviveHeld&&!state.players.some((p:any)=>p.id===reviveHeld&&['downed','last-chance'].includes(p.life)))reviveHeld=null;
   const labels:Record<string,string>={active:'نشط',downed:'ساقط — انتظر إحياء زميل', 'last-chance':'بلا قلوب — تنتظر الفرصة الأخيرة',eliminated:'خارج الجولة',escaped:'هارب — مشاهد'};
   el('life').textContent=`${labels[self.life]} · قلوب ${self.hearts}/3 · ذخيرة ${self.ammo}`;
@@ -211,35 +255,31 @@ function renderGame(){
   const select=el<HTMLSelectElement>('spectate');const value=self.spectating||'';select.hidden=self.life==='active';
   const alive=room?.players.filter((p:any)=>p.life==='active')||[];
   if(Array.from(select.options).map(o=>o.value).join()!==alive.map((p:any)=>p.id).join()){select.replaceChildren();for(const p of alive){const option=document.createElement('option');option.value=p.id;option.textContent=p.name;select.append(option);}}select.value=value;
-  if(r.result)room.phase='finished';
 }
 if(location.hash==='#owner')el('ownerPanel').hidden=false;
 button('ownerEscape').onclick=()=>{const field=el<HTMLInputElement>('ownerSecret');send({type:'escape',code:field.value});field.value='';};
 button('ownerAuth').onclick=()=>{const field=el<HTMLInputElement>('ownerSecret');send({type:'owner-auth',secret:field.value});field.value='';};
 
-function draw() {
+function draw(now = performance.now()) {
+  // Idle lobby views are static; four waiting players should not repaint four maps at 60 Hz.
+  if (!state && !firstPerson && idleMapDrawn) return;
+  idleMapDrawn = false;
+  const displayMotion = presentation.update(motion, canPredictMovement() ? currentIntent() : null, now, closedDoors(doors));
   const door = nearestDoor(),object=nearestObjective(),friendNearby=state?.round?.friend.state==='trapped'&&Math.hypot(motion.x-state.round.friend.x,motion.z-state.round.friend.z)<=1.5;
-  button('interact').disabled = !mapCompatible || room?.phase !== 'playing' || state?.round?.self?.life!=='active' || (!door&&!object&&!friendNearby) || !room?.players.find((p:any)=>p.id===session?.playerId)?.mic;
-  button('interact').textContent = object?`E · جمع ${object.id.startsWith('clue')?'دليل':'ذخيرة'}`:friendNearby?'E · إنقاذ سليم':door ? `E · ${doors[door.id] ? 'قفل' : 'فتح'} ${door.label}` : 'E · اقترب من باب';
+  const interact = button('interact');
+  const disabled = !mapCompatible || room?.phase !== 'playing' || state?.round?.self?.life!=='active' || (!door&&!object&&!friendNearby) || !room?.players.find((p:any)=>p.id===session?.playerId)?.mic;
+  const label = object?`E · جمع ${object.id.startsWith('clue')?'دليل':'ذخيرة'}`:friendNearby?'E · إنقاذ سليم':door ? `E · ${doors[door.id] ? 'قفل' : 'فتح'} ${door.label}` : 'E · اقترب من باب';
+  if (interact.disabled !== disabled) interact.disabled = disabled;
+  if (interact.textContent !== label) interact.textContent = label;
   if (firstPerson && view) {
-    view.draw(motion,pitch,yaw,state?.players || [],doors,hunters,state?.round||null,session?.playerId,el<HTMLSelectElement>('mode').value === 'crouch' || keys.has('ControlLeft'));
-    requestAnimationFrame(draw); return;
+    view.draw(displayMotion,pitch,yaw,state?.players || [],doors,hunters,state?.round||null,session?.playerId,el<HTMLSelectElement>('mode').value === 'crouch' || keys.has('ControlLeft'));
+    return;
   }
-  ctx.clearRect(0,0,800,800);
-  const scale = canvas.width / ARENA.maxX;
-  for (const zone of ARENA.zones) {
-    ctx.fillStyle = zone.kind === 'courtyard' ? '#233c31' : zone.kind === 'room' ? '#1c2729' : '#172326';
-    ctx.fillRect(zone.minX*scale,zone.minZ*scale,(zone.maxX-zone.minX)*scale,(zone.maxZ-zone.minZ)*scale);
-  }
-  ctx.strokeStyle = '#1e3032'; ctx.lineWidth = 1;
-  for (let i = 0; i <= ARENA.maxX; i++) { ctx.beginPath(); ctx.moveTo(i*scale,0);ctx.lineTo(i*scale,800);ctx.moveTo(0,i*scale);ctx.lineTo(800,i*scale);ctx.stroke(); }
-  ctx.fillStyle='#4a5856'; for (const w of ARENA.walls) ctx.fillRect(w.minX*scale,w.minZ*scale,(w.maxX-w.minX)*scale,(w.maxZ-w.minZ)*scale);
+  ctx.clearRect(0,0,800,800); ctx.drawImage(mapLayer,0,0);
   for (const d of ARENA.doors) { ctx.fillStyle=doors[d.id]?'#5c9a80':'#bf9858'; ctx.fillRect(d.minX*scale,d.minZ*scale,Math.max(3,(d.maxX-d.minX)*scale),Math.max(3,(d.maxZ-d.minZ)*scale)); }
-  ctx.fillStyle = '#8fa69a'; ctx.font = '12px Tahoma'; ctx.textAlign = 'center';
-  for (const zone of ARENA.zones) ctx.fillText(zone.label,zone.x*scale,zone.z*scale);
   for (const p of state?.players || []) {
     const local = p.id === session?.playerId;
-    const point = local ? motion : remote.get(p.id) || { x:p.x, z:p.z };
+    const point = local ? displayMotion : remote.get(p.id) || { x:p.x, z:p.z };
     if (!local) { point.x += (p.x-point.x)*.22; point.z += (p.z-point.z)*.22; remote.set(p.id,point); }
     ctx.beginPath();ctx.arc(point.x*scale,point.z*scale,12,0,Math.PI*2);ctx.fillStyle=p.frozen?'#9f8b65':local?'#b1e1ba':'#79b6dd';ctx.fill();
     if(local){ctx.beginPath();ctx.arc(p.x*scale,p.z*scale,16,0,Math.PI*2);ctx.strokeStyle='#fff';ctx.stroke();}
@@ -248,8 +288,7 @@ function draw() {
   for(const o of [...OBJECTIVES.clues,...OBJECTIVES.ammo,OBJECTIVES.gate]){ctx.fillStyle='id'in o?(String(o.id).startsWith('clue')?'#eadc91':'#83c3d3'):'#9de0ab';ctx.fillRect(o.x*scale-4,o.z*scale-4,8,8);}
   if(state?.round?.friend){const f=state.round.friend;ctx.fillStyle='#d8d5b6';ctx.fillRect(f.x*scale-6,f.z*scale-6,12,12);}
   for (const h of hunters) { ctx.fillStyle=h.id==='hamza'?'#e89070':'#ba94df';ctx.beginPath();ctx.arc(h.x*scale,h.z*scale,10,0,Math.PI*2);ctx.fill();ctx.fillText(h.name,h.x*scale,h.z*scale-16);ctx.beginPath();ctx.moveTo(h.x*scale,h.z*scale);ctx.lineTo((h.x-Math.sin(h.yaw))*scale,(h.z-Math.cos(h.yaw))*scale);ctx.strokeStyle=ctx.fillStyle;ctx.stroke(); }
-  if (!state) { ctx.fillStyle='#829a90';ctx.font='22px Tahoma';ctx.textAlign='center';ctx.fillText('بانتظار بدء اختبار الفريق',400,390); }
-  requestAnimationFrame(draw);
+  if (!state) { ctx.fillStyle='#829a90';ctx.font='22px Tahoma';ctx.textAlign='center';ctx.fillText('بانتظار بدء اختبار الفريق',400,390); idleMapDrawn = true; }
 }
 const viewport = el('viewport');
 button('flashlight').onclick = () => {
@@ -285,5 +324,5 @@ button('capture').onclick = async () => {
 document.addEventListener('mousemove', e => { if (document.pointerLockElement === view?.canvas) look(e.movementX,e.movementY); });
 document.addEventListener('pointerlockchange', () => { if (!document.pointerLockElement) release(); });
 document.addEventListener('pointerlockerror', () => notice('قفل الماوس غير متاح. استخدم السحب للنظر.'));
-connect(); draw();
-window.addEventListener('pagehide', () => { clearTimeout(reconnectTimer); stopMic(); void sound.dispose(); view?.dispose(); });
+connect(); const stopFrameLoop = startFrameLoop(draw);
+window.addEventListener('pagehide', () => { stopFrameLoop(); clearTimeout(reconnectTimer); stopMic(); void sound.dispose(); view?.dispose(); });

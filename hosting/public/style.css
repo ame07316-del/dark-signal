@@ -5,3 +5,5 @@
 #voiceStatus,#calibrationStatus{font-size:12px;line-height:1.8;color:#a6c4b4}meter{width:100%;margin-top:8px}input[type=range]{padding:0;accent-color:#a8d3b7}
 
 #entryError{font-size:12px;color:#dec995;line-height:1.7}#gameHud{margin-top:18px}#gameHud p{font-size:13px;line-height:1.8}#results{color:#d9c898}#revive{touch-action:none}#gameHud input{max-width:260px}
+
+.movement-status{margin:14px 0 0;padding:12px 14px;border-right:3px solid #d8b36a;background:#2b251a;color:#f3dfb5;font-size:13px;line-height:1.8}
