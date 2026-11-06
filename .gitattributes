@@ -1,0 +1,3 @@
+# Built, verified deployment artifacts. Do not normalize embedded vendor GLSL strings.
+hosting/** linguist-generated=true
+hosting/public/app.js -whitespace

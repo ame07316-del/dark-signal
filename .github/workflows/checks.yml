@@ -11,8 +11,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run verify:runtime
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: git diff --exit-code -- hosting/
       - run: npm run test:load
       - run: npm run test:e2e

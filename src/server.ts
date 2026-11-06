@@ -1,6 +1,7 @@
 import { OwnerAuth, ConnectionLimiter } from './security.js';
 import { AudioCoordinator, voiceWeight, validSignal, AUDIO_PROTOCOL } from './audio.js';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { ARENA } from './movement.js';
 import { createServer } from 'node:http';
 import { WebSocket, WebSocketServer } from 'ws';
@@ -13,27 +14,43 @@ export function createGameServer(options: { allowedOrigins?: string[]; maxConnec
   const upgrades=new ConnectionLimiter(1,20),roomCreates=new ConnectionLimiter(.1,10);
   const calibration=new AudioCoordinator();
   const clients = new Set<Client>();
+  // Resolve assets against this module, not the host's working directory.
+  // The checked-in hosting runtime uses ../public; development uses dist/public.
+  const assetDefinitions: Record<string, { urls: URL[]; type: string }> = {
+    '/': { urls: [new URL('../public/index.html', import.meta.url)], type: 'text/html; charset=utf-8' },
+    '/style.css': { urls: [new URL('../public/style.css', import.meta.url)], type: 'text/css; charset=utf-8' },
+    '/app.js': { urls: [new URL('../public/app.js', import.meta.url), new URL('../dist/public/app.js', import.meta.url)], type: 'text/javascript; charset=utf-8' },
+  };
+  const assets = new Map<string, { body: Buffer; type: string }>();
+  for (const [path, definition] of Object.entries(assetDefinitions)) {
+    for (const url of definition.urls) {
+      try { assets.set(path, { body: readFileSync(fileURLToPath(url)), type: definition.type }); break; }
+      catch { /* /ready reports missing assets without exposing server paths. */ }
+    }
+  }
   const server = createServer((req, res) => {
-    const assets: Record<string, [string, string]> = {
-      '/': ['public/index.html', 'text/html; charset=utf-8'],
-      '/style.css': ['public/style.css', 'text/css; charset=utf-8'],
-      '/app.js': ['dist/public/app.js', 'text/javascript; charset=utf-8'],
-    };
+    let path: string;
+    try { path = new URL(req.url || '/', 'http://localhost').pathname; }
+    catch { res.writeHead(400); res.end(); return; }
+    const read = req.method === 'GET' || req.method === 'HEAD';
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; media-src 'self' blob:; frame-ancestors *");
-    if ((req.method === 'GET' || req.method === 'HEAD') && req.url && assets[req.url]) {
-      const [file, type] = assets[req.url];
-      try {
-        const body = readFileSync(file); res.setHeader('Content-Type', type);
-        res.setHeader('Cache-Control', 'no-store');
-        res.end(req.method === 'HEAD' ? undefined : body);
-      } catch { res.statusCode = 503; res.end('Client not built. Run npm run build.'); }
+    res.setHeader('Cache-Control', 'no-store');
+    if (read && Object.hasOwn(assetDefinitions, path)) {
+      const asset = assets.get(path);
+      if (!asset) { res.writeHead(503); res.end(req.method === 'HEAD' ? undefined : 'Client not built. Run npm run build before deploying.'); return; }
+      res.setHeader('Content-Type', asset.type);
+      res.setHeader('Content-Length', asset.body.length);
+      res.end(req.method === 'HEAD' ? undefined : asset.body);
       return;
     }
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-store');
-    if (req.method === 'GET' && req.url === '/health') res.end(JSON.stringify({ status: 'ok' }));
-    else { res.statusCode = 404; res.end(JSON.stringify({ error: 'NOT_FOUND' })); }
+    if (read && path === '/health') res.end(req.method === 'HEAD' ? undefined : JSON.stringify({ status: 'ok' }));
+    else if (read && path === '/ready') {
+      const ready = assets.size === Object.keys(assetDefinitions).length;
+      res.statusCode = ready ? 200 : 503;
+      res.end(req.method === 'HEAD' ? undefined : JSON.stringify({ status: ready ? 'ready' : 'not_ready' }));
+    } else { res.statusCode = 404; res.end(req.method === 'HEAD' ? undefined : JSON.stringify({ error: 'NOT_FOUND' })); }
   });
   const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024, perMessageDeflate: false });
   server.on('upgrade', (req, socket, head) => {

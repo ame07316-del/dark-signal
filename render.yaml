@@ -3,9 +3,9 @@ services:
     name: dark-signal
     runtime: node
     plan: free
-    buildCommand: npm ci --include=dev && npm run build
+    buildCommand: npm ci --omit=dev
     startCommand: npm start
-    healthCheckPath: /health
+    healthCheckPath: /ready
     envVars:
       - key: NODE_ENV
         value: production
