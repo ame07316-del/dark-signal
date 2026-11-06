@@ -4,7 +4,12 @@ test('two browser players calibrate, start, move and leave', async ({ browser })
   const second = await browser.newContext({ permissions: ['microphone'], viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   for(const context of [first,second])await context.addInitScript(()=>{
     const NativeAudio=window.AudioContext;(window as any).__audio=[];(window as any).__tones=0;
-    window.AudioContext=class extends NativeAudio {constructor(options?:AudioContextOptions){super(options);(window as any).__audio.push(this);}createOscillator(){(window as any).__tones++;return super.createOscillator();}};
+    // Keep calibration deterministic; the browser's fake audio track still carries RTP.
+    window.AudioContext=class extends NativeAudio {
+      constructor(options?:AudioContextOptions){super(options);(window as any).__audio.push(this);}
+      createOscillator(){(window as any).__tones++;return super.createOscillator();}
+      createAnalyser(){const a=super.createAnalyser();a.getFloatTimeDomainData=(data:Float32Array)=>data.fill(0);return a;}
+    };
     const Native=window.RTCPeerConnection;
     (window as any).__pcs=[];
     window.RTCPeerConnection=class extends Native {constructor(config?:RTCConfiguration){super(config);(window as any).__pcs.push(this);}};
@@ -45,17 +50,27 @@ test('two browser players calibrate, start, move and leave', async ({ browser })
   await a.keyboard.down('KeyW'); await a.waitForTimeout(300); await a.keyboard.up('KeyW');
   await expect.poll(async () => Number((await a.locator('#stats').textContent())!.match(/x ([0-9.]+)/)![1])).toBeGreaterThan(before + .2);
   await expect(b.locator('#stats')).toContainText('tick');
-  await a.locator('#toggleView').click();
+  // The real click into 3D was tested above; avoid a headless actionability wait for a stalled RAF when switching back.
+  await a.evaluate(() => document.getElementById('toggleView')!.click());
+  await a.bringToFront();
   const z = async () => Number((await a.locator('#stats').textContent())!.match(/z ([0-9.]+)/)![1]);
+  // Stop well before the doorway: the server correctly refuses to close it on an occupied player.
   await a.keyboard.down('KeyS');
-  await expect.poll(z,{intervals:[50]}).toBeGreaterThan(4.8);
+  await expect.poll(z,{intervals:[50],timeout:10000}).toBeGreaterThan(4.6);
   await a.keyboard.up('KeyS'); await a.waitForTimeout(120);
+  if (await z() > 5.4) {
+    await a.keyboard.down('KeyW');
+    await expect.poll(z,{intervals:[50],timeout:10000}).toBeLessThan(5.3);
+    await a.keyboard.up('KeyW'); await a.waitForTimeout(120);
+  }
   await expect(a.locator('#interact')).toBeEnabled();
   await a.keyboard.press('KeyE');
   await expect(a.locator('#interact')).toContainText('فتح');
   await a.keyboard.down('KeyS');await a.waitForTimeout(700);await a.keyboard.up('KeyS');
   expect(await z()).toBeLessThan(5.71);
-  await a.keyboard.press('KeyE');await expect(a.locator('#interact')).toContainText('قفل');
+  await a.keyboard.press('KeyE');
+  try { await expect(a.locator('#interact')).toContainText('قفل'); }
+  catch (error) { console.error('Door reopening:', await a.locator('#stats').textContent(), await a.locator('#notice').textContent()); throw error; }
   await a.keyboard.down('KeyS');
   await expect.poll(z,{intervals:[50]}).toBeGreaterThan(6.5);await a.keyboard.up('KeyS');
   // Move beyond proximity range: outgoing RTP tracks must be detached, not the mic device.
@@ -81,10 +96,12 @@ test('two browser players calibrate, start, move and leave', async ({ browser })
     const track=pc.getSenders().find(s=>s.track)?.track!;track.stop();track.dispatchEvent(new Event('ended'));
   });
   await expect(a.locator('#mic')).toBeEnabled();
+  await expect(a.locator('#movementStatus')).toContainText('المايك');
   const stopped=await z();await a.keyboard.down('KeyW');await a.waitForTimeout(300);await a.keyboard.up('KeyW');
   expect(await z()).toBe(stopped);
   await a.locator('#mic').click();
   await expect(a.locator('#players li').filter({hasText:'أول'})).toContainText('مايك جاهز',{timeout:25000});
+  await expect(a.locator('#movementStatus')).toBeHidden();
   await expect.poll(async()=>a.evaluate(()=>((window as any).__pcs as RTCPeerConnection[]).filter(p=>p.connectionState==='connected').length),{timeout:15000}).toBe(1);
   await b.locator('#leave').click(); await expect(a.locator('#players li')).toHaveCount(1);
   expect(errors).toEqual([]);
@@ -125,7 +142,14 @@ test('four participants build all six voice links after queued quiet calibration
   for(const page of pages.slice(1)){await page.locator('#code').fill(code);await page.locator('#join').click();}
   await expect(pages[0].locator('#players li')).toHaveCount(4);
   await Promise.all(pages.map(page=>page.locator('#mic').click()));
-  for(const page of pages){await expect(page.locator('#ready')).toBeEnabled({timeout:40000});await page.locator('#ready').click();}
+  for(const page of pages){
+    try { await expect(page.locator('#ready')).toBeEnabled({timeout:40000}); }
+    catch (error) {
+      const status = await Promise.all(pages.map(async p => ({notice:await p.locator('#notice').textContent(),calibration:await p.locator('#calibrationStatus').textContent(),voice:await p.locator('#voiceStatus').textContent(),players:await p.locator('#players').textContent()})));
+      console.error('Four-player calibration:', status); throw error;
+    }
+    await page.locator('#ready').click();
+  }
   for(const page of pages)await expect.poll(async()=>page.evaluate(()=>((window as any).__pcs as RTCPeerConnection[]).filter(p=>p.connectionState==='connected').length),{timeout:20000}).toBe(3);
   for(const context of contexts)await context.close();
 });

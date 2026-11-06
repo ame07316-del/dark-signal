@@ -10,6 +10,16 @@ export function createView(host: HTMLElement) {
   renderer.domElement.tabIndex = 0; host.append(renderer.domElement);
   const scene = new THREE.Scene(); scene.fog = new THREE.Fog(0x101619, 10, 38);
   const camera = new THREE.PerspectiveCamera(75, 1, .05, 45); camera.rotation.order = 'YXZ'; scene.add(camera);
+  let renderWidth = 0, renderHeight = 0;
+  function resize() {
+    const width = host.clientWidth, height = host.clientHeight;
+    if (!width || !height || (width === renderWidth && height === renderHeight)) return;
+    renderWidth = width; renderHeight = height;
+    renderer.setSize(width, height, false); camera.aspect = width / height; camera.updateProjectionMatrix();
+  }
+  // Avoid forcing layout during every animation frame when the viewport is unchanged.
+  const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(resize);
+  resizeObserver?.observe(host);
   scene.add(new THREE.HemisphereLight(0x9cb1bd, 0x28231b, .75));
   const mat = new THREE.MeshStandardMaterial({ color: 0x565c56, roughness: 1 });
   function box(x: number, y: number, z: number, w: number, h: number, d: number, material = mat) {
@@ -49,11 +59,9 @@ export function createView(host: HTMLElement) {
   const frozen = new THREE.MeshStandardMaterial({ color: 0x9a845c, roughness: .9 });
   let disposed = false;
   renderer.domElement.addEventListener('webglcontextlost', e => { e.preventDefault(); host.dataset.lost = 'true'; });
-  function draw(local: Motion, pitch: number, yaw: number, players: {id:string; x:number; z:number; frozen:boolean}[], doors: DoorStates, hunters: {id:string;x:number;z:number;yaw:number}[], round:any, id?: string, crouch = false) {
+  function draw(local: Pick<Motion, 'x' | 'z'>, pitch: number, yaw: number, players: {id:string; x:number; z:number; frozen:boolean}[], doors: DoorStates, hunters: {id:string;x:number;z:number;yaw:number}[], round:any, id?: string, crouch = false) {
     if (disposed) return;
-    const width = host.clientWidth, height = host.clientHeight;
-    const size = renderer.getSize(new THREE.Vector2());
-    if (size.x !== width || size.y !== height) { renderer.setSize(width,height,false); camera.aspect = width/Math.max(1,height); camera.updateProjectionMatrix(); }
+    if (!resizeObserver || !renderWidth) resize();
     camera.position.set(local.x,crouch ? 1.1 : 1.65,local.z); camera.rotation.set(pitch,yaw,0,'YXZ');
     const present = new Set(players.filter(p => p.id !== id).map(p => p.id));
     for (const [key, mesh] of others) if (!present.has(key)) { scene.remove(mesh); others.delete(key); }
@@ -76,7 +84,7 @@ export function createView(host: HTMLElement) {
     renderer.render(scene,camera);
   }
   return { canvas: renderer.domElement, draw, light(on: boolean) { flashlight.visible = on; }, dispose() {
-    disposed = true; scene.traverse(o => { if (o instanceof THREE.Mesh) o.geometry.dispose(); });
+    disposed = true; resizeObserver?.disconnect(); scene.traverse(o => { if (o instanceof THREE.Mesh) o.geometry.dispose(); });
     mat.dispose();itemMat.dispose();friendMat.dispose(); for(const m of hunterMaterials)m.dispose(); doorMat.dispose(); floorMat.dispose(); courtMat.dispose(); ceilingMat.dispose(); normal.dispose(); frozen.dispose(); renderer.dispose(); renderer.domElement.remove();
   } };
 }
