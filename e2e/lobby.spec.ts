@@ -65,12 +65,21 @@ test('two browser players calibrate, start, move and leave', async ({ browser })
   }
   await expect(a.locator('#interact')).toBeEnabled();
   await a.keyboard.press('KeyE');
-  await expect(a.locator('#interact')).toContainText('فتح');
+  try { await expect(a.locator('#interact')).toContainText('فتح'); }
+  catch (error) {
+    console.error('Door closing:', await a.locator('#stats').textContent(), await a.locator('#notice').textContent(),
+      await a.evaluate(() => ({ hidden:document.hidden, focus:document.activeElement?.id, disabled:(document.getElementById('interact') as HTMLButtonElement).disabled })), errors);
+    throw error;
+  }
   await a.keyboard.down('KeyS');await a.waitForTimeout(700);await a.keyboard.up('KeyS');
   expect(await z()).toBeLessThan(5.71);
   await a.keyboard.press('KeyE');
   try { await expect(a.locator('#interact')).toContainText('قفل'); }
-  catch (error) { console.error('Door reopening:', await a.locator('#stats').textContent(), await a.locator('#notice').textContent()); throw error; }
+  catch (error) {
+    console.error('Door reopening:', await a.locator('#stats').textContent(), await a.locator('#notice').textContent(),
+      await a.evaluate(() => ({ hidden:document.hidden, focus:document.activeElement?.id, disabled:(document.getElementById('interact') as HTMLButtonElement).disabled })), errors);
+    throw error;
+  }
   await a.keyboard.down('KeyS');
   await expect.poll(z,{intervals:[50]}).toBeGreaterThan(6.5);await a.keyboard.up('KeyS');
   // Move beyond proximity range: outgoing RTP tracks must be detached, not the mic device.
@@ -99,8 +108,10 @@ test('two browser players calibrate, start, move and leave', async ({ browser })
   await expect(a.locator('#movementStatus')).toContainText('المايك');
   const stopped=await z();await a.keyboard.down('KeyW');await a.waitForTimeout(300);await a.keyboard.up('KeyW');
   expect(await z()).toBe(stopped);
-  await a.locator('#mic').click();
+  await expect(a.locator('#restoreMic')).toBeVisible();
+  await a.locator('#restoreMic').click();
   await expect(a.locator('#players li').filter({hasText:'أول'})).toContainText('مايك جاهز',{timeout:25000});
+  await expect(a.locator('#restoreMic')).toBeHidden();
   await expect(a.locator('#movementStatus')).toBeHidden();
   await expect.poll(async()=>a.evaluate(()=>((window as any).__pcs as RTCPeerConnection[]).filter(p=>p.connectionState==='connected').length),{timeout:15000}).toBe(1);
   await b.locator('#leave').click(); await expect(a.locator('#players li')).toHaveCount(1);

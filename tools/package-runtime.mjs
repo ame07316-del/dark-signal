@@ -9,7 +9,8 @@ function copy(from, to) {
   copyFileSync(resolve(root, from), resolve(root, to));
 }
 for (const path of files('dist').filter(path => /^dist\/[^/]+\.js$/.test(path))) copy(path, path.replace('dist/', 'hosting/server/'));
-for (const path of ['public/index.html', 'public/style.css']) copy(path, `hosting/${path}`);
+// Copy the entire source-owned public tree, including fonts, textures and their licenses.
+for (const path of files('public')) copy(path, `hosting/${path}`);
 copy('dist/public/app.js', 'hosting/public/app.js');
 writeFileSync(resolve(output, 'manifest.json'), JSON.stringify({ version: 1, inputs: fingerprints(inputs()), outputs: fingerprints(files('hosting')) }, null, 2)+'\n');
 console.log('Packaged hosting/ runtime. No TypeScript or build tools required on host.');

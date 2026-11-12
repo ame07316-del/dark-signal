@@ -62,6 +62,14 @@ test('checked-in runtime runs without dist, compilers, prestart or a source-tree
       for(const [path,type]of [['/','text/html'],['/app.js?v=smoke','javascript'],['/style.css','text/css']]){
         const response=await fetch(app.base+path);assert.equal(response.status,200);assert.ok(response.headers.get('content-type').includes(type));assert.ok((await response.text()).length>100);
       }
+      for(const [path,type]of [
+        ['/assets/mansion-cover.jpg','image/jpeg'],['/assets/aged-plaster.jpg','image/jpeg'],['/assets/aged-wood.jpg','image/jpeg'],
+        ['/assets/fonts/IBMPlexSansArabic-Regular.ttf','font/ttf'],['/assets/fonts/IBMPlexSansArabic-SemiBold.ttf','font/ttf'],['/assets/fonts/OFL.txt','text/plain'],
+      ]){
+        const response=await fetch(app.base+path);assert.equal(response.status,200,path);assert.ok(response.headers.get('content-type').includes(type),path);assert.ok((await response.arrayBuffer()).byteLength>100,path);
+        const head=await fetch(app.base+path,{method:'HEAD'});assert.equal(head.status,200,path);assert.ok(Number(head.headers.get('content-length'))>100,path);
+      }
+      assert.equal((await fetch(app.base+'/assets/fonts/unknown.ttf')).status,404);
       assert.equal((await fetch(app.base+'/',{method:'HEAD'})).status,200);
       assert.deepEqual(await(await fetch(app.base+'/ready')).json(),{status:'ready'});
       assert.deepEqual(await(await fetch(app.base+'/health')).json(),{status:'ok'});
@@ -91,6 +99,15 @@ test('checked-in runtime runs without dist, compilers, prestart or a source-tree
       } finally {for(const ws of sockets)ws.terminate();}
     });
     await app.stop();app=null;
+    rmSync(join(folder,'hosting/public/assets/mansion-cover.jpg'));
+    app=await launch(folder);
+    await t.test('readiness detects a missing packaged visual asset',async()=>{
+      assert.equal((await fetch(app.base+'/health')).status,200);
+      assert.equal((await fetch(app.base+'/ready')).status,503);
+      assert.equal((await fetch(app.base+'/assets/mansion-cover.jpg')).status,503);
+    });
+    await app.stop();app=null;
+    cpSync(join(root,'hosting/public/assets/mansion-cover.jpg'),join(folder,'hosting/public/assets/mansion-cover.jpg'));
     rmSync(join(folder,'hosting/public/app.js'));
     app=await launch(folder);
     await t.test('readiness reports incomplete frontend, rather than a false healthy deployment',async()=>{
