@@ -20,6 +20,13 @@ export function createGameServer(options: { allowedOrigins?: string[]; maxConnec
     '/': { urls: [new URL('../public/index.html', import.meta.url)], type: 'text/html; charset=utf-8' },
     '/style.css': { urls: [new URL('../public/style.css', import.meta.url)], type: 'text/css; charset=utf-8' },
     '/app.js': { urls: [new URL('../public/app.js', import.meta.url), new URL('../dist/public/app.js', import.meta.url)], type: 'text/javascript; charset=utf-8' },
+    // Explicit allowlist: no directory serving, and /ready fails if a shipped asset is missing.
+    '/assets/mansion-cover.jpg': { urls: [new URL('../public/assets/mansion-cover.jpg', import.meta.url)], type: 'image/jpeg' },
+    '/assets/aged-plaster.jpg': { urls: [new URL('../public/assets/aged-plaster.jpg', import.meta.url)], type: 'image/jpeg' },
+    '/assets/aged-wood.jpg': { urls: [new URL('../public/assets/aged-wood.jpg', import.meta.url)], type: 'image/jpeg' },
+    '/assets/fonts/IBMPlexSansArabic-Regular.ttf': { urls: [new URL('../public/assets/fonts/IBMPlexSansArabic-Regular.ttf', import.meta.url)], type: 'font/ttf' },
+    '/assets/fonts/IBMPlexSansArabic-SemiBold.ttf': { urls: [new URL('../public/assets/fonts/IBMPlexSansArabic-SemiBold.ttf', import.meta.url)], type: 'font/ttf' },
+    '/assets/fonts/OFL.txt': { urls: [new URL('../public/assets/fonts/OFL.txt', import.meta.url)], type: 'text/plain; charset=utf-8' },
   };
   const assets = new Map<string, { body: Buffer; type: string }>();
   for (const [path, definition] of Object.entries(assetDefinitions)) {

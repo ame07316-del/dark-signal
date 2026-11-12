@@ -1,5 +1,111 @@
-<!doctype html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Dark Signal — اختبار الشبكة</title><link rel="stylesheet" href="/style.css"></head><body>
-<header><span class="tag">نسخة تطوير · بداية C</span><h1>DARK SIGNAL<span>مختبر الاتصال والحركة</span></h1><span id="connection">جارٍ الاتصال…</span></header>
-<main><aside><section><h2>01 / دخول الساحة</h2><label>اسم اللاعب<input id="name" maxlength="20" placeholder="اكتب اسمك" autocomplete="off"></label><label>رمز الغرفة<input id="code" maxlength="6" placeholder="ABC123" dir="ltr" autocomplete="off"></label><p id="entryError" role="alert"></p><div class="buttons"><button id="create">إنشاء غرفة تعاونية</button><button id="join" class="secondary">انضمام</button></div><button id="solo">تجربة فردية · لاعب واحد</button><p class="hint">للتجربة لوحدك: اكتب اسمك واضغط تجربة فردية. الوضع التعاوني يظل من ٢ إلى ٤ لاعبين.</p></section>
-<section><h2>02 / الفريق</h2><div class="room-code">الغرفة <strong id="roomCode">—</strong><button id="copy" class="secondary">نسخ</button></div><ul id="players"></ul><p id="phase">أنشئ غرفة أو انضم لصديقك.</p><button id="mic">تشغيل المايك ومعايرة ٥ ثوانٍ</button><button id="ready" class="secondary">أنا مستعد</button><button id="start">بدء الاختبار</button><button id="leave" class="secondary">مغادرة الغرفة</button></section><section><h2>03 / الصوت والقرب</h2><button id="enableAudio" class="secondary">تفعيل / اختبار صوت المتصفح</button><label>مستوى مؤثرات اللعبة فقط<input id="effectsVolume" type="range" min="0" max="1" step="0.05" value="0.35"></label><label>مستوى المايك <meter id="micMeter" min="0" max="1" value="0"></meter></label><p id="voiceStatus" role="status">الصوت المباشر يستخدم STUN فقط؛ بعض الشبكات لن تسمح بالاتصال.</p><p id="calibrationStatus" role="status">بانتظار المايك</p><p class="hint">لا تسجيل صوت. المايك للمحادثة ولكشف المطاردين؛ لا زر كتم أثناء الجولة. سماعات الأذن موصى بها لمنع الصدى. لو إذن المايك مرفوض داخل المعاينة، افتح الرابط في نافذة مستقلة.</p></section><p id="notice" role="status" aria-live="polite">افتح الرابط على جهاز آخر، ثم شاركه رمز الغرفة.</p></aside>
-<article><div class="arena-head"><h2>القصر · مخطط أرضي أولي</h2><span id="stats">بانتظار الجولة</span></div><section id="gameHud"><p id="life">٣ قلوب · طلقة واحدة عند بدء الجولة</p><p id="clues">اجمع ٤ أدلة، أنقذ سليم ثم عد للبوابة.</p><p id="reviveProgress" role="status"></p><div class="buttons"><button id="shoot" disabled>G · إطلاق طلقة</button><button id="revive" disabled>R · اضغط مطولًا للإحياء</button></div><label>كود البوابة<input id="escapeCode" inputmode="numeric" maxlength="128" autocomplete="off" type="password"></label><button id="escape" disabled>تأكيد الكود عند البوابة</button><label>مشاهدة زميل<select id="spectate" hidden></select></label><p id="results" role="status"></p><button id="rematch" hidden>إعادة للردهة</button></section><section id="ownerPanel" hidden><label>جلسة المالك الخاصة<input id="ownerSecret" type="password" maxlength="128" autocomplete="off"></label><button id="ownerAuth">توثيق الجلسة</button><button id="ownerEscape">إرسال الكود الخاص عند البوابة</button></section><p id="hunters" role="status">حمزة ورنا: بانتظار الجولة</p><p id="location" aria-live="polite">رواق الدخول</p><div class="view-buttons"><button id="toggleView" class="secondary" aria-pressed="false">منظور أول 3D</button><button id="flashlight" class="secondary" aria-pressed="true">الكشاف: يعمل</button><button id="capture" class="secondary">التحكم بالماوس</button></div><p id="movementStatus" class="movement-status" role="status" aria-live="polite" hidden></p><div id="viewport"><div id="crosshair" hidden>+</div><span id="viewHint" hidden>اسحب للنظر · Esc لتحرير الماوس</span></div><canvas id="arena" width="800" height="800" aria-label="خريطة ساحة الاختبار واللاعبين"></canvas><div class="legend"><span>● أنت · أخضر</span><span>● زملاؤك · أزرق</span><span>○ موقع الخادم · أبيض</span><span>حمزة · برتقالي / رنا · بنفسجي</span></div><button id="interact" class="secondary" disabled>E · اقترب من باب</button><div class="controls"><div id="dpad"><button data-key="KeyW" aria-label="أعلى">↑</button><div><button data-key="KeyA" aria-label="يسار">←</button><button data-key="KeyS" aria-label="أسفل">↓</button><button data-key="KeyD" aria-label="يمين">→</button></div></div><label>الحركة<select id="mode"><option value="walk">مشي</option><option value="run">جري</option><option value="crouch">تسلل</option></select></label></div><p class="hint">WASD أو الأسهم للحركة · Shift للجري · Ctrl للتسلل · F للكشاف. المطاردون يمسكون اللاعبين؛ لكل لاعب ٣ قلوب وفرصة أخيرة. R أو زر الإحياء لمدة ١٠ ثوانٍ، وG لإطلاق المسدس غير القاتل. في 3D: اسحب داخل المشهد للنظر، أو فعّل التحكم بالماوس. الأخضر تنبؤ محلي، والدائرة البيضاء آخر موقع مؤكد. الجدران الرمادية غير قابلة للعبور. الأخضر في الخريطة هو الفناء المركزي؛ بعض الفتحات بها أبواب تفاعلية: اقترب واضغط E أو زر التفاعل.</p></article></main><footer>نموذج هندسي للاختبار وليست خامات أو خريطة القصر النهائي. صوت قرب مباشر بين اللاعبين حتى ٨ أمتار؛ لا تسجيل، ولا يُرسل الصوت الخام لخادم اللعبة.</footer><script type="module" src="/app.js"></script></body></html>
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101411">
+  <meta name="description" content="Dark Signal — لعبة رعب تعاونية في قصر مهجور.">
+  <title>Dark Signal | الإشارة المظلمة</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body data-phase="home">
+  <header class="site-header">
+    <a class="brand" href="/" aria-label="Dark Signal — الصفحة الرئيسية">
+      <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 40 40" fill="none"><circle cx="20" cy="20" r="16.5"/><circle cx="20" cy="20" r="9"/><path d="M20 1v38M1 20h38"/><circle cx="20" cy="20" r="2.5" fill="currentColor" stroke="none"/></svg></span>
+      <span class="brand-name"><strong dir="ltr">DARK SIGNAL</strong><small>الإشارة المظلمة</small></span>
+    </a>
+    <div class="header-meta"><span class="build-label">تجربة مبكرة <i></i> رعب تعاوني</span><span id="connection" data-state="connecting" role="status">جارٍ الاتصال بالخادم…</span></div>
+  </header>
+
+  <main id="homeScreen" class="home-screen page-width">
+    <section class="landing-hero" aria-labelledby="heroTitle">
+      <div class="entry-column">
+        <p class="eyebrow"><span class="eyebrow-line"></span> إشارة واردة <span class="eyebrow-number" dir="ltr">/ 01</span></p>
+        <h1 id="heroTitle">الصوت يقودك.<br><em>والقصر يصغي.</em></h1>
+        <p class="hero-description">سليم محاصر في الداخل. اجمع فريقك، تعقّب الأدلة، وأبقِ صوتك منخفضًا… فهناك من يستمع.</p>
+        <div class="hero-facts"><span>٢–٤ لاعبين</span><span>غرفة خاصة</span><span>مايك مطلوب</span></div>
+
+        <div class="entry-form" aria-label="الدخول إلى اللعبة">
+          <div class="form-heading"><div><span class="section-kicker">ابدأ من هنا</span><h2>ادخل مع فريقك</h2></div><span class="form-index" dir="ltr">01 — 03</span></div>
+          <label for="name">اسم اللاعب <span>اختياري</span></label>
+          <input id="name" maxlength="20" placeholder="الاسم الذي يراه فريقك" autocomplete="off">
+          <button id="create" class="button button-primary create-button" type="button" disabled><span>إنشاء غرفة خاصة</span><span class="button-arrow" aria-hidden="true">←</span></button>
+          <div class="join-line">
+            <div class="join-field"><label for="code">عندك رمز غرفة؟</label><input id="code" maxlength="6" placeholder="ABC123" dir="ltr" autocomplete="off" spellcheck="false"></div>
+            <button id="join" class="button button-outline" type="button" disabled>انضمام <span aria-hidden="true">←</span></button>
+          </div>
+          <button id="solo" class="solo-button" type="button" disabled><span class="solo-icon" aria-hidden="true">↗</span><span><strong>تجربة فردية</strong><small>لا يمكن انضمام لاعبين آخرين</small></span><span class="solo-arrow" aria-hidden="true">←</span></button>
+          <p id="entryError" class="entry-message" role="alert"></p>
+        </div>
+      </div>
+      <div class="hero-art" aria-hidden="true">
+        <div class="art-corner art-corner-top"></div><div class="art-corner art-corner-bottom"></div>
+        <div class="art-caption"><span class="art-caption-index" dir="ltr">DS / 01</span><span>القصر المهجور<br><strong>الصمت ليس أمانًا.</strong></span></div>
+        <span class="art-side-label" dir="ltr">LISTEN CLOSELY</span>
+      </div>
+    </section>
+    <section class="briefing" aria-labelledby="briefingTitle">
+      <div class="briefing-title"><p class="eyebrow"><span class="eyebrow-line"></span> قبل الدخول</p><h2 id="briefingTitle">خطة النجاة</h2><p>ابقوا قريبين. لكل صوت ثمن.</p></div>
+      <div class="briefing-card"><span class="brief-number" dir="ltr">01</span><span class="brief-icon" aria-hidden="true">⌁</span><h3>اعثروا على سليم</h3><p>أنقذوا صديقكم وأعيدوه معكم إلى البوابة.</p></div>
+      <div class="briefing-card"><span class="brief-number" dir="ltr">02</span><span class="brief-icon" aria-hidden="true">◇</span><h3>اجمعوا الأدلة</h3><p>أربعة أدلة تكشف أرقام كود الهروب.</p></div>
+      <div class="briefing-card"><span class="brief-number" dir="ltr">03</span><span class="brief-icon" aria-hidden="true">◌</span><h3>تحدثوا بحذر</h3><p>حمزة يسمع أفضل، ورنا ترى أفضل. المايك جزء من اللعبة.</p></div>
+    </section>
+  </main>
+
+  <main id="roomScreen" class="room-screen page-width" hidden>
+    <div class="workspace-heading"><div><p class="eyebrow"><span class="eyebrow-line"></span> الإشارة المظلمة <span class="eyebrow-number" dir="ltr">/ 02</span></p><h1 id="roomTitle">غرفة الفريق</h1></div><span id="roomState" class="room-state">تجهيز الجولة</span></div>
+    <div class="room-layout">
+      <aside class="room-sidebar" aria-label="الغرفة والفريق والصوت">
+        <section class="panel team-panel">
+          <div class="panel-heading"><div><span class="section-kicker">الغرفة الخاصة</span><h2>فريقك</h2></div><span id="playerCount" class="counter" dir="ltr">0 / 4</span></div>
+          <div class="code-card"><div><span>رمز الغرفة</span><strong id="roomCode" dir="ltr">—</strong></div><button id="copy" class="icon-button" type="button" disabled>نسخ</button></div>
+          <p id="roomMode" class="micro-copy">شارك الرمز مع فريقك.</p>
+          <ul id="players" class="player-list" aria-label="اللاعبون"></ul>
+          <p id="phase" class="phase-note">أنشئ غرفة أو انضم لصديقك.</p>
+          <div class="lobby-actions"><button id="mic" class="button button-primary" type="button" disabled>تشغيل المايك ومعايرة ٥ ثوانٍ</button><button id="ready" class="button button-outline" type="button" disabled>أنا مستعد</button><button id="start" class="button button-primary start-button" type="button" disabled>بدء الجولة <span aria-hidden="true">←</span></button></div>
+          <p id="notice" class="notice" role="status" aria-live="polite">افتح الرابط على جهاز آخر، ثم شاركه رمز الغرفة.</p>
+        </section>
+        <section class="panel audio-panel">
+          <div class="panel-heading"><div><span class="section-kicker">الصوت والقرب</span><h2>ابقَ على اتصال</h2></div><span class="audio-symbol" aria-hidden="true">◖))</span></div>
+          <p id="calibrationStatus" class="audio-status" role="status">بانتظار المايك</p>
+          <label for="micMeter" class="meter-label">مستوى المايك <meter id="micMeter" min="0" max="1" value="0"></meter></label>
+          <p id="voiceStatus" class="audio-status" role="status">الصوت المباشر يستخدم STUN فقط؛ بعض الشبكات لن تسمح بالاتصال.</p>
+          <button id="enableAudio" class="button button-outline audio-button" type="button">تفعيل / اختبار صوت المتصفح</button>
+          <label for="effectsVolume" class="volume-label">مستوى مؤثرات اللعبة فقط <input id="effectsVolume" type="range" min="0" max="1" step="0.05" value="0.35"></label>
+          <p class="micro-copy">لا يُسجّل الصوت. استخدم سماعات لتقليل الصدى. عند انقطاع المايك تتوقف الحركة حتى تستعيده.</p>
+        </section>
+        <button id="leave" class="leave-button" type="button" disabled>مغادرة الغرفة <span aria-hidden="true">↗</span></button>
+      </aside>
+
+      <article class="room-content">
+        <section id="prepPanel" class="prep-panel" aria-labelledby="prepHeading">
+          <div class="prep-art"><div class="prep-art-content"><p class="eyebrow light"><span class="eyebrow-line"></span> قبل أن تُفتح الأبواب</p><h2 id="prepHeading">لا تدخل وحدك.</h2><p id="prepCopy">شارك رمز الغرفة مع أصدقائك. عندما يصبح الجميع مستعدين، يمكن للمضيف بدء الجولة.</p></div><div class="prep-coordinates" dir="ltr">DS — 01 <span>THE MANSION</span></div></div>
+          <div class="prep-steps"><div class="steps-heading"><span class="section-kicker">الاستعداد</span><h3>ثلاث خطوات قبل الدخول</h3><p>خذ لحظة لتجهيز فريقك.</p></div><div class="step"><span class="step-index" dir="ltr">01</span><div><h4 id="firstStepTitle">اجمع الفريق</h4><p id="firstStepCopy">الغرف التعاونية تتسع من لاعبين إلى أربعة.</p></div></div><div class="step"><span class="step-index" dir="ltr">02</span><div><h4>شغّل المايك</h4><p>التزم الصمت خمس ثوانٍ عندما يحين دورك للمعايرة.</p></div></div><div class="step"><span class="step-index" dir="ltr">03</span><div><h4>أعلن استعدادك</h4><p id="lastStepCopy">يبدأ المضيف الجولة بعد استعداد الجميع.</p></div></div></div>
+          <div class="prep-note"><span aria-hidden="true">✳</span><p>الصوت ينتقل بين اللاعبين القريبين مباشرةً؛ بعض الشبكات قد تمنع الاتصال الصوتي.</p></div>
+        </section>
+
+        <section id="gamePanel" class="game-panel" aria-label="واجهة الجولة" hidden>
+          <div class="game-header"><div><span class="section-kicker">داخل القصر</span><h2 id="location">رواق الدخول</h2></div><span id="stats" dir="ltr">بانتظار الجولة</span></div>
+          <section id="resultCard" class="result-card" hidden><span class="section-kicker">نهاية الجولة</span><h2 id="resultTitle">انتهت الجولة</h2><p id="results" role="status"></p><button id="rematch" class="button button-primary" type="button" hidden>إعادة للردهة</button></section>
+          <div id="gameHud" class="hud-grid"><div class="hud-cell"><span>حالة اللاعب</span><p id="life">٣ قلوب · طلقة واحدة عند بدء الجولة</p></div><div class="hud-cell"><span>المهمة</span><p id="clues">اجمع ٤ أدلة، أنقذ سليم ثم عد للبوابة.</p></div></div>
+          <p id="movementStatus" class="movement-status" role="status" aria-live="polite" hidden></p>
+          <button id="restoreMic" class="button button-outline restore-mic" type="button" hidden>إعادة تشغيل المايك</button>
+          <div class="scene-frame"><div id="viewport"><div id="crosshair" hidden>+</div><span id="viewHint" hidden>اسحب للنظر · Esc لتحرير الماوس</span></div><canvas id="arena" width="800" height="800" aria-label="خريطة ساحة الاختبار واللاعبين"></canvas></div>
+          <div class="view-buttons"><button id="toggleView" class="button button-outline" type="button" aria-pressed="false">منظور أول 3D</button><button id="flashlight" class="button button-outline" type="button" aria-pressed="true">الكشاف: يعمل</button><button id="capture" class="button button-outline" type="button">التحكم بالماوس</button></div>
+          <div class="legend"><span><i class="legend-dot self"></i> أنت</span><span><i class="legend-dot team"></i> زملاؤك</span><span><i class="legend-dot server"></i> موقع الخادم</span><span><i class="legend-dot hunter"></i> المطاردان</span></div>
+          <p id="hunters" class="hunter-status" role="status">حمزة ورنا: بانتظار الجولة</p>
+          <div class="action-row"><button id="interact" class="button button-primary" type="button" disabled>E · اقترب من باب</button><button id="shoot" class="button button-outline" type="button" disabled>G · إطلاق طلقة</button><button id="revive" class="button button-outline" type="button" disabled>R · اضغط للإحياء</button></div>
+          <p id="reviveProgress" class="progress-copy" role="status"></p>
+          <div class="controls-panel"><div><span class="section-kicker">على الهاتف</span><h3>التحكم بالحركة</h3><p>اضغط مع الاستمرار للحركة، واسحب المشهد للنظر في وضع 3D.</p><label for="mode">أسلوب الحركة<select id="mode"><option value="walk">مشي</option><option value="run">جري</option><option value="crouch">تسلل</option></select></label></div><div id="dpad" aria-label="أزرار الحركة"><button type="button" data-key="KeyW" aria-label="للأمام">↑</button><div><button type="button" data-key="KeyA" aria-label="يسار">←</button><button type="button" data-key="KeyS" aria-label="للخلف">↓</button><button type="button" data-key="KeyD" aria-label="يمين">→</button></div></div></div>
+          <div class="gate-panel"><div><span class="section-kicker">العودة إلى البوابة</span><h3>كود الهروب</h3><p>اجمع أرقام الأدلة الأربعة، ثم أدخل الكود قرب البوابة.</p></div><div class="gate-entry"><label for="escapeCode">أرقام الكود</label><input id="escapeCode" inputmode="numeric" maxlength="4" autocomplete="off" type="password" placeholder="••••"><button id="escape" class="button button-outline" type="button" disabled>تأكيد الكود</button></div></div>
+          <label id="spectateLabel" class="spectate-label" for="spectate" hidden>مشاهدة زميل<select id="spectate" hidden></select></label>
+          <section id="ownerPanel" class="owner-panel" hidden><label for="ownerSecret">جلسة المالك الخاصة</label><input id="ownerSecret" type="password" maxlength="128" autocomplete="off"><button id="ownerAuth" class="button button-outline" type="button">توثيق الجلسة</button><button id="ownerEscape" class="button button-outline" type="button">إرسال الكود الخاص عند البوابة</button></section>
+          <details class="help-details"><summary>اختصارات الكمبيوتر وتفاصيل الخريطة</summary><p>WASD أو الأسهم للحركة · Shift للجري · Ctrl للتسلل · F للكشاف · E للتفاعل · G لإطلاق المسدس غير القاتل · R للإحياء مع الاستمرار ١٠ ثوانٍ. في 3D اسحب للنظر أو فعّل التحكم بالماوس. الدائرة البيضاء في الخريطة هي آخر موقع أكده الخادم.</p></details>
+        </section>
+      </article>
+    </div>
+  </main>
+  <footer class="site-footer"><span dir="ltr">DARK SIGNAL <i>•</i> EARLY BUILD</span><span>نسخة تجريبية · القصر والشخصيات قيد التطوير</span><span>صوت مباشر دون تسجيل · <a href="/assets/fonts/OFL.txt">ترخيص الخط</a></span></footer>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

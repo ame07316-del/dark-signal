@@ -46,26 +46,59 @@ function stopMic() { micGeneration++;calibrationKey='';calibrating=false;voice.c
 function clearSession() { if (document.pointerLockElement) document.exitPointerLock(); session = null; hunters = []; doors = initialDoors(); room = null; state = null; resetMotion();presentation.reset();showMovementStatus('');remote.clear();stopMic(); void sound.dispose(); save(); renderLobby(); }
 function renderLobby() {
   const me = room?.players.find((p: any) => p.id === session?.playerId);
-  for (const id of ['create', 'join', 'solo']) button(id).disabled = !!session || ws?.readyState !== WebSocket.OPEN;
+  const inRoom = !!session, solo = room?.mode === 'solo-test';
+  const gameVisible = room?.phase === 'playing' || room?.phase === 'finished';
+  el('homeScreen').hidden = inRoom; el('roomScreen').hidden = !inRoom;
+  el('prepPanel').hidden = gameVisible; el('gamePanel').hidden = !gameVisible;
+  const nextPhase = !inRoom ? 'home' : room?.phase || 'connecting';
+  if (document.body.dataset.phase !== nextPhase) {
+    document.body.dataset.phase = nextPhase;
+    // On phones, the room/game order changes by phase. Do not leave the new screen offscreen.
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }
+  el('roomTitle').textContent = solo ? 'تجربة فردية' : 'غرفة الفريق';
+  el('roomState').textContent = !room ? 'جارٍ استعادة الغرفة' : room.phase === 'playing' ? 'الجولة جارية' : room.phase === 'finished' ? 'انتهت الجولة' : 'تجهيز الجولة';
+  el('roomMode').textContent = solo ? 'تجربة فردية خاصة؛ لا يمكن للاعبين الآخرين الانضمام.' : 'شارك الرابط ورمز الغرفة مع فريقك.';
+  el('playerCount').textContent = `${room?.players.length || 0} / ${solo ? 1 : 4}`;
+  el('prepHeading').textContent = solo ? 'طريقك إلى الداخل.' : 'لا تدخل وحدك.';
+  el('prepCopy').textContent = solo ? 'هذه غرفة تجربة فردية. شغّل المايك، أكمل المعايرة ثم استعد لبدء التجربة.' : 'شارك رمز الغرفة مع أصدقائك. عندما يصبح الجميع مستعدين، يمكن للمضيف بدء الجولة.';
+  el('firstStepTitle').textContent = solo ? 'تجربة خاصة' : 'اجمع الفريق';
+  el('firstStepCopy').textContent = solo ? 'هذه الغرفة للاعب واحد ولا تستقبل لاعبين آخرين.' : 'الغرف التعاونية تتسع من لاعبين إلى أربعة.';
+  el('lastStepCopy').textContent = solo ? 'بعد المعايرة، أعلن استعدادك وابدأ التجربة.' : 'يبدأ المضيف الجولة بعد استعداد الجميع.';
+  for (const id of ['create', 'join', 'solo']) button(id).disabled = inRoom || ws?.readyState !== WebSocket.OPEN;
+  button('copy').disabled = !room || solo;
   button('mic').disabled = !me || calibrating || me.mic;
+  button('mic').textContent = calibrating ? 'جارٍ معايرة المايك…' : me?.mic ? 'المايك جاهز' : 'تشغيل المايك ومعايرة ٥ ثوانٍ';
+  button('restoreMic').hidden = room?.phase !== 'playing' || !me || !!me.mic;
+  button('restoreMic').disabled = button('mic').disabled;
+  button('restoreMic').textContent = calibrating ? 'جارٍ معايرة المايك…' : 'إعادة تشغيل المايك';
   button('ready').disabled = !mapCompatible || !me?.mic || room?.phase !== 'lobby';
   button('ready').textContent = me?.ready ? 'إلغاء الاستعداد' : 'أنا مستعد';
-  button('leave').disabled = !session || ws?.readyState !== WebSocket.OPEN;
-  button('start').disabled = !mapCompatible || !me || room?.hostId !== me.id || room.phase !== 'lobby' || room.players.length < (room.mode === 'solo-test' ? 1 : 2) || room.players.some((p: any) => !p.ready || !p.connected);
+  button('leave').disabled = !inRoom || ws?.readyState !== WebSocket.OPEN;
+  button('start').disabled = !mapCompatible || !me || room?.hostId !== me.id || room.phase !== 'lobby' || room.players.length < (solo ? 1 : 2) || room.players.some((p: any) => !p.ready || !p.connected);
   el('roomCode').textContent = room?.code || '—';
-  el('phase').textContent = room?.phase === 'finished' ? 'انتهت الجولة. المضيف يستطيع إعادة الفريق للردهة.' : room?.phase === 'playing' ? (me?.mic ? 'الجولة جارية.' : 'الحركة متوقفة. شغّل المايك لاستعادتها.') : room?.mode === 'solo-test' ? 'تجربة فردية · شغّل المايك وأكمل المعايرة، ثم اضغط أنا مستعد وابدأ الاختبار.' : 'يلزم لاعبان على الأقل، ومايك معاير واستعداد الجميع.';
+  el('phase').textContent = !room ? 'جارٍ استعادة الاتصال بالغرفة.' : room.phase === 'finished' ? 'انتهت الجولة. المضيف يستطيع إعادة الفريق للردهة.' : room.phase === 'playing' ? (me?.mic ? 'الجولة جارية.' : 'الحركة متوقفة. شغّل المايك لاستعادتها.') : solo ? 'تجربة فردية · شغّل المايك وأكمل المعايرة، ثم اضغط أنا مستعد وابدأ الاختبار.' : 'يلزم لاعبان على الأقل، ومايك معاير واستعداد الجميع.';
   el('players').replaceChildren();
   for (const p of room?.players || []) {
-    const li = document.createElement('li');
-    li.textContent = `${p.name}${p.id === session?.playerId ? ' (أنت)' : ''}${p.id === room.hostId ? ' · مضيف' : ''} — ${!p.connected ? 'منقطع' : p.ready ? 'مستعد' : p.mic ? 'مايك جاهز' : 'بانتظار المايك'}`;
-    el('players').append(li);
+    // Player names come from the server; never interpret them as HTML.
+    const li = document.createElement('li'); li.className = 'player-row';
+    const avatar = document.createElement('span'); avatar.className = 'player-avatar'; avatar.setAttribute('aria-hidden', 'true'); avatar.textContent = Array.from(String(p.name))[0] || '؟';
+    const info = document.createElement('span'); info.className = 'player-info';
+    const name = document.createElement('span'); name.className = 'player-name'; name.textContent = p.name;
+    const role = document.createElement('span'); role.className = 'player-role'; role.textContent = [p.id === session?.playerId ? 'أنت' : 'لاعب', p.id === room.hostId ? 'المضيف' : ''].filter(Boolean).join(' · ');
+    const status = document.createElement('span'); status.className = 'player-status';
+    status.dataset.ready = String(!!p.ready); status.dataset.offline = String(!p.connected);
+    status.textContent = !p.connected ? 'منقطع' : p.ready ? 'مستعد' : p.mic ? 'مايك جاهز' : 'بانتظار المايك';
+    info.append(name, role); li.append(avatar, info, status); el('players').append(li);
   }
 }
 function connect() {
   ws = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws`);
-  ws.onopen = () => { attempts = 0; el('connection').textContent = '● متصل بالخادم'; if (session) send({ type: 'resume', code: session.code, token: session.token }); renderLobby(); };
+  ws.onopen = () => { attempts = 0; el('connection').textContent = 'متصل بالخادم'; el('connection').dataset.state = 'online'; if (session) send({ type: 'resume', code: session.code, token: session.token }); renderLobby(); };
   ws.onclose = () => {
-    el('connection').textContent = '○ انقطع الاتصال — إعادة المحاولة'; resetMotion(); stopMic(); room = null; state = null; hunters = []; presentation.reset(); if (session) showMovementStatus('انقطع الاتصال بالخادم؛ الحركة متوقفة حتى يعود الاتصال.'); sound.atmosphere(false); renderLobby();
+    el('connection').textContent = 'انقطع الاتصال — إعادة المحاولة'; el('connection').dataset.state = 'offline'; resetMotion(); stopMic(); room = null; state = null; hunters = []; presentation.reset();
+    if (session) { showMovementStatus('انقطع الاتصال بالخادم؛ الحركة متوقفة حتى يعود الاتصال.'); notice('انقطع الاتصال بالخادم. جارٍ استعادة الغرفة؛ ستحتاج إلى تشغيل المايك مجددًا بعد الاتصال.'); }
+    sound.atmosphere(false); renderLobby();
     reconnectTimer = setTimeout(connect, Math.min(5000, 500 * 2 ** attempts++));
   };
   ws.onerror = () => notice('تعذر اتصال الغرف عبر WebSocket. ستتم إعادة المحاولة؛ لو الرابط محميّ افتح المعاينة من داخل Arena بدل رابط E2B الخام.');
@@ -77,11 +110,11 @@ function connect() {
       room = m.room; doors = room.doors;
       if (room.phase === 'lobby') {
         resetMotion(); state = null; presentation.reset(); showMovementStatus('');
-        el('results').textContent = ''; button('rematch').hidden = true;
+        el('results').textContent = ''; el('resultCard').hidden = true; button('rematch').hidden = true;
         el('life').textContent = '٣ قلوب · طلقة واحدة عند بدء الجولة'; el('clues').textContent = 'اجمع الأدلة وأنقذ سليم ثم اهرب';
       }
       if (started) { resetMotion(); motion = newMotion(Math.max(0, room.players.findIndex((p: any) => p.id === session?.playerId))); presentation.reset(); }
-      voice.sync(room.players); sound.atmosphere(room.phase === 'playing'); renderLobby();
+      voice.sync(room.players); sound.atmosphere(room.phase === 'playing'); renderLobby(); updateInteraction();
     }
     if (m.type === 'map') {
       mapCompatible = m.map?.id === ARENA.id;
@@ -115,6 +148,7 @@ function connect() {
       pending = result.pending; correction = result.correction;
       if (me.frozen) resetMotion();
       if(m.round?.self?.spectating){const watched=m.players.find((p:any)=>p.id===m.round.self.spectating);if(watched){motion.x=watched.x;motion.z=watched.z;}}
+      updateInteraction();
       el('location').textContent = zoneAt(me.x,me.z);
       el('stats').textContent = `tick ${m.tick} · x ${me.x.toFixed(2)} · z ${me.z.toFixed(2)} · Δ ${correction.toFixed(2)}m`;
     }
@@ -163,6 +197,7 @@ button('mic').onclick = async () => {
     notice('تم فتح المايك. انتظر دورك والتزم الصمت أثناء القياس خمس ثوانٍ.');send({type:'calibrate'});
   } catch {stopMic();send({type:'mic',available:false});notice('تعذر تشغيل المايك. افتح إذن المتصفح وأعد المحاولة.');}
 };
+button('restoreMic').onclick=()=>button('mic').click();
 button('enableAudio').onclick=async()=>{try{await sound.unlock();sound.tone('flash',.35);sound.atmosphere(room?.phase==='playing');voiceStatus('صوت المتصفح مفعّل.');}catch{notice('تعذر تشغيل صوت المتصفح.');}};
 el<HTMLInputElement>('effectsVolume').oninput=()=>sound.level(Number(el<HTMLInputElement>('effectsVolume').value));
 setInterval(()=>{
@@ -222,6 +257,17 @@ function nearestObjective(){
   const available=[...OBJECTIVES.clues.filter(c=>!state?.round?.clues.find((q:any)=>q.id===c.id)?.collected),...OBJECTIVES.ammo.filter(a=>!state?.round?.pickups.includes(a.id))];
   return available.filter(p=>Math.hypot(p.x-motion.x,p.z-motion.z)<=1.5).sort((a,b)=>Math.hypot(a.x-motion.x,a.z-motion.z)-Math.hypot(b.x-motion.x,b.z-motion.z))[0];
 }
+// Update interaction feedback on server messages too, not only on the animation clock.
+// A stalled frame must not leave an already-opened/closed door labeled with its old action.
+function updateInteraction() {
+  const door = nearestDoor(), object = nearestObjective();
+  const friendNearby = state?.round?.friend.state === 'trapped' && Math.hypot(motion.x-state.round.friend.x,motion.z-state.round.friend.z)<=1.5;
+  const interact = button('interact');
+  const disabled = !mapCompatible || room?.phase !== 'playing' || state?.round?.self?.life !== 'active' || (!door&&!object&&!friendNearby) || !room?.players.find((p:any)=>p.id===session?.playerId)?.mic;
+  const label = object ? `E · جمع ${object.id.startsWith('clue')?'دليل':'ذخيرة'}` : friendNearby ? 'E · إنقاذ سليم' : door ? `E · ${doors[door.id] ? 'قفل' : 'فتح'} ${door.label}` : 'E · اقترب من باب';
+  if (interact.disabled !== disabled) interact.disabled = disabled;
+  if (interact.textContent !== label) interact.textContent = label;
+}
 button('interact').onclick = () => {
   const object=nearestObjective();if(object){send({type:'collect',id:object.id});return;}
   if(state?.round?.friend.state==='trapped'&&Math.hypot(motion.x-state.round.friend.x,motion.z-state.round.friend.z)<=1.5){send({type:'rescue-friend'});return;}
@@ -231,6 +277,10 @@ function beginRevive(){const target=state?.players.find((p:any)=>['downed','last
 function endRevive(){reviveHeld=null;send({type:'revive-cancel'});}
 button('revive').onpointerdown=e=>{e.preventDefault();button('revive').setPointerCapture(e.pointerId);beginRevive();};
 for(const event of ['pointerup','pointercancel','lostpointercapture'])button('revive').addEventListener(event,endRevive);
+// The held action is available from a focused button as well as R and touch.
+button('revive').onkeydown=e=>{if((e.key===' '||e.key==='Enter')&&!e.repeat){e.preventDefault();beginRevive();}};
+button('revive').onkeyup=e=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();endRevive();}};
+button('revive').onblur=()=>{if(reviveHeld)endRevive();};
 setInterval(()=>{if(reviveHeld)send({type:'revive',targetId:reviveHeld});},250);
 button('shoot').onclick=()=>send({type:'shoot'});
 button('escape').onclick=()=>{send({type:'escape',code:el<HTMLInputElement>('escapeCode').value.normalize('NFKC').replace(/[٠-٩۰-۹]/g,c=>String(c.charCodeAt(0)-(c>='۰'?1776:1632)))});el<HTMLInputElement>('escapeCode').value='';};
@@ -250,9 +300,10 @@ function renderGame(){
   button('shoot').disabled=!active||self.ammo<1;
   button('escape').disabled=!active||self.panelTicks>0||Math.hypot(motion.x-OBJECTIVES.gate.x,motion.z-OBJECTIVES.gate.z)>1.8;
   button('revive').disabled=!active||!state.players.some((p:any)=>['downed','last-chance'].includes(p.life)&&Math.hypot(p.x-motion.x,p.z-motion.z)<=1.5);
-  button('rematch').hidden=!r.result;button('rematch').disabled=room?.hostId!==session?.playerId;
+  el('resultCard').hidden=!r.result; button('rematch').hidden=!r.result;button('rematch').disabled=room?.hostId!==session?.playerId;
+  el('resultTitle').textContent=r.result?.outcome==='complete'?'نجوتم معًا':r.result?.outcome==='partial'?'هربتم دون سليم':'انتهت الجولة';
   el('results').textContent=r.result?`${r.result.reason} · ${r.result.durationSeconds} ثانية · ${r.result.revives} إحياء — ${r.result.players.map((p:any)=>`${p.name}: ${labels[p.life]}`).join(' / ')}`:'';
-  const select=el<HTMLSelectElement>('spectate');const value=self.spectating||'';select.hidden=self.life==='active';
+  const select=el<HTMLSelectElement>('spectate');const value=self.spectating||'';select.hidden=self.life==='active';el('spectateLabel').hidden=select.hidden;
   const alive=room?.players.filter((p:any)=>p.life==='active')||[];
   if(Array.from(select.options).map(o=>o.value).join()!==alive.map((p:any)=>p.id).join()){select.replaceChildren();for(const p of alive){const option=document.createElement('option');option.value=p.id;option.textContent=p.name;select.append(option);}}select.value=value;
 }
@@ -265,12 +316,7 @@ function draw(now = performance.now()) {
   if (!state && !firstPerson && idleMapDrawn) return;
   idleMapDrawn = false;
   const displayMotion = presentation.update(motion, canPredictMovement() ? currentIntent() : null, now, closedDoors(doors));
-  const door = nearestDoor(),object=nearestObjective(),friendNearby=state?.round?.friend.state==='trapped'&&Math.hypot(motion.x-state.round.friend.x,motion.z-state.round.friend.z)<=1.5;
-  const interact = button('interact');
-  const disabled = !mapCompatible || room?.phase !== 'playing' || state?.round?.self?.life!=='active' || (!door&&!object&&!friendNearby) || !room?.players.find((p:any)=>p.id===session?.playerId)?.mic;
-  const label = object?`E · جمع ${object.id.startsWith('clue')?'دليل':'ذخيرة'}`:friendNearby?'E · إنقاذ سليم':door ? `E · ${doors[door.id] ? 'قفل' : 'فتح'} ${door.label}` : 'E · اقترب من باب';
-  if (interact.disabled !== disabled) interact.disabled = disabled;
-  if (interact.textContent !== label) interact.textContent = label;
+  updateInteraction();
   if (firstPerson && view) {
     view.draw(displayMotion,pitch,yaw,state?.players || [],doors,hunters,state?.round||null,session?.playerId,el<HTMLSelectElement>('mode').value === 'crouch' || keys.has('ControlLeft'));
     return;
